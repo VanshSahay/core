@@ -39,7 +39,7 @@ Handlers.add(
   { Action = "Trigger" },
   function(msg)
     -- Validate workflow context
-    if not msg.Tags["Workflow-ID"] then
+    if not msg.Tags.Workflowid then
       return msg.reply({ Data = "Workflow ID required" })
     end
 
@@ -48,9 +48,9 @@ Handlers.add(
       Action = "ExecutionComplete",
       Data = msg.Data,
       Tags = {
-        ["Workflow-ID"] = msg.Tags["Workflow-ID"],
-        ["Node-ID"] = ao.id
+        Workflowid = msg.Tags.Workflowid,
+        Nodeid = ao.id
       }
     })
   end
-) 
+)

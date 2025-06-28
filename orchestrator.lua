@@ -41,8 +41,8 @@ local function executeNode(nodeId, input)
     Action = "Execute",
     Data = input,
     Tags = {
-      ["Workflow-ID"] = state.workflowId,
-      ["Node-ID"] = nodeId
+      Workflowid = state.workflowId,
+      Nodeid = nodeId
     }
   })
 
@@ -50,7 +50,7 @@ local function executeNode(nodeId, input)
   local result = Receive({
     Action = "ExecutionComplete",
     Tags = {
-      ["Node-ID"] = nodeId
+      Nodeid = nodeId
     }
   })
 
@@ -91,7 +91,7 @@ Handlers.add(
     msg.reply({
       Data = "Workflow execution completed",
       Tags = {
-        ["Workflow-ID"] = state.workflowId
+        Workflowid = state.workflowId
       }
     })
   end
@@ -102,7 +102,7 @@ Handlers.add(
   "NodeExecutionComplete",
   { Action = "NodeExecutionComplete" },
   function(msg)
-    local nodeId = msg.Tags["Node-ID"]
+    local nodeId = msg.Tags.Nodeid
     if not nodeId then return end
 
     -- Record execution result
@@ -118,4 +118,4 @@ Handlers.add(
       executeNode(nextNodeId, msg.Data)
     end
   end
-) 
+)

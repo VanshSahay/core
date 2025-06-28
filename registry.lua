@@ -30,7 +30,7 @@ Handlers.add(
     msg.reply({
       Data = "Node registered successfully",
       Tags = {
-        ["Node-ID"] = nodeId
+        Nodeid = nodeId
       }
     })
   end
@@ -42,7 +42,7 @@ Handlers.add(
   { Action = "DiscoverNodes" },
   function(msg)
     -- Optional type filter
-    local nodeType = msg.Tags["Node-Type"]
+    local nodeType = msg.Tags.Nodetype
     local results = {}
     
     for id, node in pairs(nodes) do
@@ -62,7 +62,7 @@ Handlers.add(
   "GetNode",
   { Action = "GetNode" },
   function(msg)
-    local nodeId = msg.Tags["Node-ID"]
+    local nodeId = msg.Tags.Nodeid
     if not nodeId or not nodes[nodeId] then
       return msg.reply({ Data = "Node not found" })
     end
@@ -71,4 +71,4 @@ Handlers.add(
       Data = nodes[nodeId]
     })
   end
-) 
+)

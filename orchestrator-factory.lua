@@ -16,7 +16,7 @@ Handlers.add(
       return msg.reply({ Data = "Invalid workflow data" })
     end
 
-    local workflowId = msg.Tags["Workflowid"]
+    local workflowId = msg.Tags.Workflowid
     if not workflowId then
       return msg.reply({ Data = "Workflow ID required" })
     end
@@ -31,8 +31,8 @@ Handlers.add(
           connections = msg.Data.connections
         },
         Tags = {
-          ["Processtype"] = "orchestrator",
-          ["Workflowid"] = workflowId
+          Processtype = "orchestrator",
+          Workflowid = workflowId
         }
       }
     )
@@ -51,8 +51,8 @@ Handlers.add(
     msg.reply({
       Data = "Orchestrator created successfully",
       Tags = {
-        ["Orchestrator-ID"] = orchestratorId,
-        ["Workflow-ID"] = workflowId
+        Orchestratorid = orchestratorId,
+        Workflowid = workflowId
       }
     })
   end
@@ -63,7 +63,7 @@ Handlers.add(
   "GetOrchestrator",
   { Action = "GetOrchestrator" },
   function(msg)
-    local workflowId = msg.Tags["Workflow-ID"]
+    local workflowId = msg.Tags.Workflowid
     if not workflowId or not orchestrators[workflowId] then
       return msg.reply({ Data = "Orchestrator not found" })
     end
@@ -72,4 +72,4 @@ Handlers.add(
       Data = orchestrators[workflowId]
     })
   end
-) 
+)

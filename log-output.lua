@@ -32,8 +32,8 @@ Handlers.add(
     -- Record the log entry
     local logEntry = {
       timestamp = os.time(),
-      workflowId = msg.Tags["Workflow-ID"],
-      nodeId = msg.Tags["Node-ID"],
+      workflowId = msg.Tags.Workflowid,
+      nodeId = msg.Tags.Nodeid,
       data = msg.Data
     }
     
@@ -54,7 +54,7 @@ Handlers.add(
   { Action = "GetLogs" },
   function(msg)
     -- Optional workflow filter
-    local workflowId = msg.Tags["Workflow-ID"]
+    local workflowId = msg.Tags.Workflowid
     local results = {}
     
     if workflowId then
@@ -71,4 +71,4 @@ Handlers.add(
       Data = results
     })
   end
-) 
+)

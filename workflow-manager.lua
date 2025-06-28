@@ -39,7 +39,7 @@ Handlers.add(
         Target = factoryId,
         Action = "CreateOrchestrator",
         Tags = {
-          ["Workflowid"] = workflowId
+          Workflowid = workflowId
         },
         Data = msg.Data
       })
@@ -48,7 +48,7 @@ Handlers.add(
     msg.reply({
       Data = "Workflow deployed successfully",
       Tags = {
-        ["Workflow-ID"] = workflowId
+        Workflowid = workflowId
       }
     })
   end
@@ -59,11 +59,11 @@ Handlers.add(
   "ConfigureRegistry",
   { Action = "ConfigureRegistry" },
   function(msg)
-    if not msg.Tags["Registryid"] then
-        return msg.reply({ Data = "Registry ID required" })
+    if not msg.Tags.Registryid then
+      return msg.reply({ Data = "Registry ID required" })
     end
-    print(msg.Tags)
-    registryId = msg.Tags["Registryid"]
+    
+    registryId = msg.Tags.Registryid
     msg.reply({ Data = "Registry configured" })
   end
 )
@@ -73,11 +73,11 @@ Handlers.add(
   "ConfigureFactory",
   { Action = "ConfigureFactory" },
   function(msg)
-    if not msg.Tags["Factoryid"] then
+    if not msg.Tags.Factoryid then
       return msg.reply({ Data = "Factory ID required" })
     end
     
-    factoryId = msg.Tags["Factoryid"]
+    factoryId = msg.Tags.Factoryid
     msg.reply({ Data = "Factory configured" })
   end
 )
@@ -87,7 +87,7 @@ Handlers.add(
   "GetWorkflow",
   { Action = "GetWorkflow" },
   function(msg)
-    local workflowId = msg.Tags["Workflowid"]
+    local workflowId = msg.Tags.Workflowid
     if not workflowId or not workflows[workflowId] then
       return msg.reply({ Data = "Workflow not found" })
     end
