@@ -4,6 +4,7 @@
 -- Initialize state
 if not orchestrators then
   orchestrators = {}
+  print("[FACTORY] Initialized orchestrators table")
 end
 
 -- Handler for creating orchestrators
@@ -11,50 +12,60 @@ Handlers.add(
   "CreateOrchestrator",
   { Action = "CreateOrchestrator" },
   function(msg)
+    print("[FACTORY] Received CreateOrchestrator request")
+    
     -- Basic validation
     if not msg.Data or type(msg.Data) ~= "table" then
-      return msg.reply({ Data = "Invalid workflow data" })
+      print("[FACTORY] Error: Invalid workflow data")
+      return msg.reply({ Data = { error = "Invalid workflow data" } })
     end
 
     local workflowId = msg.Tags.Workflowid
     if not workflowId then
-      return msg.reply({ Data = "Workflow ID required" })
+      print("[FACTORY] Error: Workflow ID missing")
+      return msg.reply({ Data = { error = "Workflow ID required" } })
     end
 
+    print("[FACTORY] Creating new orchestrator")
+    print(msg.Data)
+    
     -- Spawn new orchestrator process
-    local spawn = ao.spawn(
-      ao.env.Module.Id,  -- Using same module for simplicity
-      {
-        Data = {
-          workflowId = workflowId,
-          nodes = msg.Data.nodes,
-          connections = msg.Data.connections
-        },
-        Tags = {
-          Processtype = "orchestrator",
-          Workflowid = workflowId
-        }
-      }
-    )
-
-    -- Wait for spawn confirmation
-    local result = Receive({ Action = "Spawned" })
-    local orchestratorId = result.Process
-
-    -- Record the orchestrator
-    orchestrators[workflowId] = {
-      id = orchestratorId,
-      status = "active",
-      createdAt = os.time()
-    }
-
-    msg.reply({
-      Data = "Orchestrator created successfully",
+    local orchestratorId = ao.spawn("orchestrator.lua", {
+      Data = msg.Data,
       Tags = {
-        Orchestratorid = orchestratorId,
-        Workflowid = workflowId
+        Workflowid = workflowId,
+        Processtype = "orchestrator"
       }
     })
+
+    if not orchestratorId then
+      print("[FACTORY] Error: Failed to spawn orchestrator")
+      return msg.reply({ Data = { error = "Failed to spawn orchestrator" } })
+    end
+
+    print("[FACTORY] Spawned orchestrator")
+    print(orchestratorId)
+
+    -- Store orchestrator reference
+    orchestrators[workflowId] = {
+      id = orchestratorId,
+      status = "spawned",
+      timestamp = os.time()
+    }
+    print("[FACTORY] Stored orchestrator reference")
+
+    -- Send confirmation
+    msg.reply({
+      Data = {
+        status = "success",
+        orchestratorId = orchestratorId
+      },
+      Tags = {
+        Workflowid = workflowId,
+        Orchestratorid = orchestratorId
+      }
+    })
+    print("[FACTORY] Sent confirmation")
   end
 )
 
@@ -65,11 +76,20 @@ Handlers.add(
   function(msg)
     local workflowId = msg.Tags.Workflowid
     if not workflowId or not orchestrators[workflowId] then
-      return msg.reply({ Data = "Orchestrator not found" })
+      return msg.reply({ 
+        Data = {
+          status = "error",
+          error = "Orchestrator not found"
+        }
+      })
     end
     
     msg.reply({
-      Data = orchestrators[workflowId]
+      Data = orchestrators[workflowId],
+      Tags = {
+        Workflowid = workflowId,
+        ["Content-Type"] = "application/json"
+      }
     })
   end
 )

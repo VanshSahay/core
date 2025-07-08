@@ -16,6 +16,7 @@ if not state then
     state.workflowId = ao.env.Data.workflowId
     state.nodes = ao.env.Data.nodes or {}
     state.connections = ao.env.Data.connections or {}
+    print(string.format("Initialized orchestrator for workflow %s", state.workflowId))
   end
 end
 
@@ -30,68 +31,79 @@ local function getNextNodes(currentNodeId)
   return nextNodes
 end
 
--- Helper function to execute a node
-local function executeNode(nodeId, input)
-  local node = state.nodes[nodeId]
-  if not node then return nil, "Node not found" end
-
-  -- Send execution request to node process
-  ao.send({
-    Target = node.processId,
-    Action = "Execute",
-    Data = input,
-    Tags = {
-      Workflowid = state.workflowId,
-      Nodeid = nodeId
-    }
-  })
-
-  -- Wait for node execution result
-  local result = Receive({
-    Action = "ExecutionComplete",
-    Tags = {
-      Nodeid = nodeId
-    }
-  })
-
-  return result.Data
-end
-
--- Handler for starting workflow execution
+-- Handler for workflow trigger events
 Handlers.add(
-  "StartExecution",
-  { Action = "StartExecution" },
+  "WorkflowTrigger",
+  { Action = "WorkflowTrigger" },
   function(msg)
-    -- Find start nodes (nodes with no incoming connections)
-    local startNodes = {}
-    local hasIncoming = {}
+    print(string.format("Received workflow trigger for workflow %s", msg.Tags.Workflowid))
     
-    for _, connection in pairs(state.connections) do
-      hasIncoming[connection.to] = true
+    if msg.Tags.Workflowid ~= state.workflowId then
+      return msg.reply({
+        Data = {
+          status = "error",
+          error = "Wrong workflow ID"
+        }
+      })
     end
-    
-    for nodeId, _ in pairs(state.nodes) do
-      if not hasIncoming[nodeId] then
-        table.insert(startNodes, nodeId)
+
+    -- Find the trigger node that sent this
+    local triggerNodeId = msg.From
+    if not triggerNodeId then
+      return msg.reply({
+        Data = {
+          status = "error",
+          error = "Missing trigger node ID"
+        }
+      })
+    end
+
+    -- Verify this is a valid trigger node in our workflow
+    local found = false
+    for id, node in pairs(state.nodes) do
+      if node.processId == triggerNodeId then
+        found = true
+        break
       end
     end
 
-    -- Execute start nodes
-    for _, nodeId in ipairs(startNodes) do
-      local output = executeNode(nodeId, msg.Data)
-      if output then
-        -- Execute next nodes in sequence
-        local nextNodes = getNextNodes(nodeId)
-        for _, nextNodeId in ipairs(nextNodes) do
-          executeNode(nextNodeId, output)
-        end
+    if not found then
+      return msg.reply({
+        Data = {
+          status = "error",
+          error = "Invalid trigger node"
+        }
+      })
+    end
+
+    -- Get next nodes to execute
+    local nextNodes = getNextNodes("trigger")
+    print(string.format("Found %d next nodes to execute", #nextNodes))
+
+    -- Execute each next node
+    for _, nodeId in ipairs(nextNodes) do
+      local node = state.nodes[nodeId]
+      if node then
+        print(string.format("Executing node %s (processId: %s)", nodeId, node.processId))
+        
+        -- Send execution request
+        ao.send({
+          Target = node.processId,
+          Action = "Log",
+          Data = msg.Data,
+          Tags = {
+            Workflowid = state.workflowId,
+            Nodeid = nodeId,
+            ["Content-Type"] = "application/json"
+          }
+        })
       end
     end
 
     msg.reply({
-      Data = "Workflow execution completed",
-      Tags = {
-        Workflowid = state.workflowId
+      Data = {
+        status = "success",
+        message = "Workflow execution started"
       }
     })
   end
@@ -115,7 +127,19 @@ Handlers.add(
     -- Find and execute next nodes
     local nextNodes = getNextNodes(nodeId)
     for _, nextNodeId in ipairs(nextNodes) do
-      executeNode(nextNodeId, msg.Data)
+      local node = state.nodes[nextNodeId]
+      if node then
+        ao.send({
+          Target = node.processId,
+          Action = "Log",
+          Data = msg.Data,
+          Tags = {
+            Workflowid = state.workflowId,
+            Nodeid = nextNodeId,
+            ["Content-Type"] = "application/json"
+          }
+        })
+      end
     end
   end
 )

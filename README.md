@@ -28,19 +28,19 @@ cd flowweave
 2. Spawn the registry process:
 ```bash
 aos registry --load registry.lua
-# Save the registry process ID
+# Save the registry process ID as REGISTRY_ID
 ```
 
 3. Spawn the factory process:
 ```bash
 aos factory --load orchestrator-factory.lua
-# Save the factory process ID
+# Save the factory process ID as FACTORY_ID
 ```
 
 4. Spawn the workflow manager:
 ```bash
 aos manager --load workflow-manager.lua
-# Save the manager process ID
+# Save the manager process ID as MANAGER_ID
 ```
 
 5. Configure the workflow manager:
@@ -50,48 +50,78 @@ aos manager
 
 # Configure registry
 Send({
-  Target = ao.id,
+  Target = MANAGER_ID,
   Action = "ConfigureRegistry",
   Tags = {
-    Registryid = "YOUR_REGISTRY_PROCESS_ID"
+    Registryid = REGISTRY_ID
   }
-})
+}).receive()
 
 # Configure factory
 Send({
-  Target = ao.id,
+  Target = MANAGER_ID,
   Action = "ConfigureFactory",
   Tags = {
-    Factoryid = "YOUR_FACTORY_PROCESS_ID"
+    Factoryid = FACTORY_ID
   }
-})
+}).receive()
 ```
 
-6. Spawn the nodes:
+6. Spawn and configure the nodes:
 ```bash
 # Spawn trigger node
 aos trigger --load manual-trigger.lua
-# Save the trigger node ID
+# Save the trigger node ID as TRIGGER_ID
+
+# Configure trigger node
+Send({
+  Target = TRIGGER_ID,
+  Action = "Configure",
+  Tags = {
+    Registryid = REGISTRY_ID
+  }
+}).receive()
+
+# Verify trigger node status
+Send({
+  Target = TRIGGER_ID,
+  Action = "Status"
+}).receive()
 
 # Spawn logger node
 aos logger --load log-output.lua
-# Save the logger node ID
+# Save the logger node ID as LOGGER_ID
+
+# Configure logger node
+Send({
+  Target = LOGGER_ID,
+  Action = "Configure",
+  Tags = {
+    Registryid = REGISTRY_ID
+  }
+}).receive()
+
+# Verify logger node status
+Send({
+  Target = LOGGER_ID,
+  Action = "Status"
+}).receive()
 ```
 
 7. Deploy a workflow:
 ```lua
 # In the manager process
 Send({
-  Target = ao.id,
+  Target = MANAGER_ID,
   Action = "DeployWorkflow",
   Data = {
     nodes = {
       trigger = {
-        processId = "YOUR_TRIGGER_NODE_ID",
+        processId = TRIGGER_ID,
         type = "trigger"
       },
       logger = {
-        processId = "YOUR_LOGGER_NODE_ID",
+        processId = LOGGER_ID,
         type = "output"
       }
     },
@@ -102,8 +132,8 @@ Send({
       }
     }
   }
-})
-# Save the workflow ID from the response
+}).receive()
+# Save the workflow ID from the response as WORKFLOW_ID
 ```
 
 ## Testing the Workflow
@@ -115,13 +145,13 @@ aos trigger
 
 # Send trigger message
 Send({
-  Target = ao.id,
+  Target = TRIGGER_ID,
   Action = "Trigger",
   Data = "Hello Flowweave!",
   Tags = {
-    Workflowid = "YOUR_WORKFLOW_ID"
+    Workflowid = WORKFLOW_ID
   }
-})
+}).receive()
 ```
 
 2. Check the logs:
@@ -131,12 +161,54 @@ aos logger
 
 # Get logs
 Send({
-  Target = ao.id,
+  Target = LOGGER_ID,
   Action = "GetLogs",
   Tags = {
-    Workflowid = "YOUR_WORKFLOW_ID"
+    Workflowid = WORKFLOW_ID
   }
-})
+}).receive()
+```
+
+## Troubleshooting
+
+If you're not seeing logs after triggering a workflow:
+
+1. Check node registration:
+```lua
+# Check trigger node status
+Send({
+  Target = TRIGGER_ID,
+  Action = "Status"
+}).receive()
+
+# Check logger node status
+Send({
+  Target = LOGGER_ID,
+  Action = "Status"
+}).receive()
+```
+
+2. If either node shows `isRegistered = false`, reconfigure the node:
+```lua
+Send({
+  Target = NODE_ID,  # TRIGGER_ID or LOGGER_ID
+  Action = "Configure",
+  Tags = {
+    Registryid = REGISTRY_ID
+  }
+}).receive()
+```
+
+3. Verify workflow deployment:
+```lua
+# In the manager process
+Send({
+  Target = MANAGER_ID,
+  Action = "GetWorkflow",
+  Tags = {
+    Workflowid = WORKFLOW_ID
+  }
+}).receive()
 ```
 
 ## Tag Format
