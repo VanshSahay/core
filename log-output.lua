@@ -12,6 +12,54 @@ if not state then
   print("[LOGGER] Initialized new state")
 end
 
+-- JSON utility functions
+local function serializeToJson(data)
+  if type(data) == "table" then
+    local json = "{"
+    local first = true
+    for k, v in pairs(data) do
+      if not first then json = json .. "," end
+      json = json .. string.format('"%s":', k)
+      if type(v) == "table" then
+        json = json .. serializeToJson(v)
+      elseif type(v) == "string" then
+        json = json .. string.format('"%s"', v)
+      else
+        json = json .. tostring(v)
+      end
+      first = false
+    end
+    return json .. "}"
+  elseif type(data) == "string" then
+    return string.format('"%s"', data)
+  else
+    return tostring(data)
+  end
+end
+
+local function deserializeJson(jsonStr)
+  if type(jsonStr) ~= "string" then return jsonStr end
+  -- Basic JSON parsing
+  local function parseValue(str)
+    str = str:match("^%s*(.-)%s*$") -- Trim whitespace
+    if str:sub(1,1) == "{" then
+      local obj = {}
+      str = str:sub(2, -2) -- Remove braces
+      for k, v in str:gmatch('"([^"]+)"%s*:%s*([^,}]+)') do
+        obj[k] = parseValue(v)
+      end
+      return obj
+    elseif str:sub(1,1) == '"' then
+      return str:sub(2, -2) -- Remove quotes
+    else
+      -- Try to convert to number if possible
+      local num = tonumber(str)
+      return num or str
+    end
+  end
+  return parseValue(jsonStr)
+end
+
 -- Helper function to get current timestamp in milliseconds
 local function getCurrentTime()
   return os.time() * 1000
@@ -26,7 +74,7 @@ Handlers.add(
     
     if not msg.Tags.Registryid then
       print("[LOGGER] Error: Registry ID missing")
-      return msg.reply({ Data = "Registry ID required" })
+      return msg.reply({ Data = serializeToJson({ error = "Registry ID required" }) })
     end
 
     state.registryId = msg.Tags.Registryid
@@ -37,7 +85,7 @@ Handlers.add(
     local result = ao.send({
       Target = state.registryId,
       Action = "Register",
-      Data = {
+      Data = serializeToJson({
         name = "Logger",
         type = "logger",
         description = "A node that logs workflow data",
@@ -46,7 +94,7 @@ Handlers.add(
           output = false,
           trigger = false
         }
-      },
+      }),
       Tags = {
         ["Content-Type"] = "application/json",
         ["Message-Type"] = "Registration",
@@ -56,7 +104,7 @@ Handlers.add(
 
     state.lastRegistrationAttempt = os.time()
     print("[LOGGER] Registration message sent")
-    msg.reply({ Data = "Configuration received, registration sent" })
+    msg.reply({ Data = serializeToJson({ message = "Configuration received, registration sent" }) })
   end
 )
 
@@ -72,7 +120,8 @@ Handlers.add(
       return
     end
 
-    if msg.Data and msg.Data.status == "success" then
+    local responseData = deserializeJson(msg.Data)
+    if responseData and responseData.status == "success" then
       state.isRegistered = true
       print("[LOGGER] Registration confirmed by registry")
     else
@@ -81,10 +130,10 @@ Handlers.add(
     end
 
     msg.reply({
-      Data = {
+      Data = serializeToJson({
         status = state.isRegistered and "registered" or "failed",
         timestamp = os.time()
-      }
+      })
     })
   end
 )
@@ -96,12 +145,12 @@ Handlers.add(
   function(msg)
     print("[LOGGER] Status check requested")
     msg.reply({
-      Data = {
+      Data = serializeToJson({
         isRegistered = state.isRegistered,
         registryId = state.registryId,
         logCount = state.logCount,
         lastRegistrationAttempt = state.lastRegistrationAttempt
-      }
+      })
     })
   end
 )
@@ -115,7 +164,7 @@ Handlers.add(
     
     if not state.isRegistered then
       print("[LOGGER] Error: Node not registered")
-      return msg.reply({ Data = "Node not registered with registry" })
+      return msg.reply({ Data = serializeToJson({ error = "Node not registered with registry" }) })
     end
 
     -- Increment log count and log the data
@@ -125,11 +174,11 @@ Handlers.add(
 
     -- Send confirmation
     msg.reply({
-      Data = {
+      Data = serializeToJson({
         status = "logged",
         count = state.logCount,
         timestamp = os.time()
-      }
+      })
     })
     print("[LOGGER] Log confirmation sent to caller")
   end
@@ -141,18 +190,18 @@ Handlers.add(
   { Action = "GetLogs" },
   function(msg)
     if not state.isRegistered then
-      return msg.reply({ Data = "Node not registered with registry" })
+      return msg.reply({ Data = serializeToJson({ error = "Node not registered with registry" }) })
     end
 
     -- Optional workflow filter
     local workflowId = msg.Tags.Workflowid
     
     msg.reply({
-      Data = {
+      Data = serializeToJson({
         logCount = state.logCount,
         registryId = state.registryId,
         timestamp = getCurrentTime()
-      }
+      })
     })
   end
 )

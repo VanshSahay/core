@@ -12,6 +12,54 @@ if not state then
   print("[TRIGGER] Initialized new state")
 end
 
+-- JSON utility functions
+local function serializeToJson(data)
+  if type(data) == "table" then
+    local json = "{"
+    local first = true
+    for k, v in pairs(data) do
+      if not first then json = json .. "," end
+      json = json .. string.format('"%s":', k)
+      if type(v) == "table" then
+        json = json .. serializeToJson(v)
+      elseif type(v) == "string" then
+        json = json .. string.format('"%s"', v)
+      else
+        json = json .. tostring(v)
+      end
+      first = false
+    end
+    return json .. "}"
+  elseif type(data) == "string" then
+    return string.format('"%s"', data)
+  else
+    return tostring(data)
+  end
+end
+
+local function deserializeJson(jsonStr)
+  if type(jsonStr) ~= "string" then return jsonStr end
+  -- Basic JSON parsing
+  local function parseValue(str)
+    str = str:match("^%s*(.-)%s*$") -- Trim whitespace
+    if str:sub(1,1) == "{" then
+      local obj = {}
+      str = str:sub(2, -2) -- Remove braces
+      for k, v in str:gmatch('"([^"]+)"%s*:%s*([^,}]+)') do
+        obj[k] = parseValue(v)
+      end
+      return obj
+    elseif str:sub(1,1) == '"' then
+      return str:sub(2, -2) -- Remove quotes
+    else
+      -- Try to convert to number if possible
+      local num = tonumber(str)
+      return num or str
+    end
+  end
+  return parseValue(jsonStr)
+end
+
 -- Handler for configuration
 Handlers.add(
   "Configure",
@@ -21,7 +69,7 @@ Handlers.add(
     
     if not msg.Tags.Registryid then
       print("[TRIGGER] Error: Registry ID missing")
-      return msg.reply({ Data = "Registry ID required" })
+      return msg.reply({ Data = serializeToJson({ error = "Registry ID required" }) })
     end
 
     state.registryId = msg.Tags.Registryid
@@ -32,7 +80,7 @@ Handlers.add(
     local result = ao.send({
       Target = state.registryId,
       Action = "Register",
-      Data = {
+      Data = serializeToJson({
         name = "Manual Trigger",
         type = "trigger",
         description = "A node that can manually trigger workflow execution",
@@ -41,7 +89,7 @@ Handlers.add(
           output = true,
           trigger = true
         }
-      },
+      }),
       Tags = {
         ["Content-Type"] = "application/json",
         ["Message-Type"] = "Registration",
@@ -51,7 +99,7 @@ Handlers.add(
 
     state.lastRegistrationAttempt = os.time()
     print("[TRIGGER] Registration message sent")
-    msg.reply({ Data = "Configuration received, registration sent" })
+    msg.reply({ Data = serializeToJson({ message = "Configuration received, registration sent" }) })
   end
 )
 
@@ -60,14 +108,15 @@ Handlers.add(
   "RegisterResponse",
   { Action = "RegisterResponse" },
   function(msg)
-    print("[TRIGGER] Received RegisterResponse")
+    print("[TRIGGER] Received Register Response")
     
     if msg.From ~= state.registryId then
       print("[TRIGGER] Warning: Response from unknown source: " .. msg.From)
       return
     end
 
-    if msg.Data and msg.Data.status == "success" then
+    local responseData = deserializeJson(msg.Data)
+    if responseData and responseData.status == "success" then
       state.isRegistered = true
       print("[TRIGGER] Registration confirmed by registry")
     else
@@ -76,10 +125,10 @@ Handlers.add(
     end
 
     msg.reply({
-      Data = {
+      Data = serializeToJson({
         status = state.isRegistered and "registered" or "failed",
         timestamp = os.time()
-      }
+      })
     })
   end
 )
@@ -91,12 +140,12 @@ Handlers.add(
   function(msg)
     print("[TRIGGER] Status check requested")
     msg.reply({
-      Data = {
+      Data = serializeToJson({
         isRegistered = state.isRegistered,
         registryId = state.registryId,
         triggerCount = state.triggerCount,
         lastRegistrationAttempt = state.lastRegistrationAttempt
-      }
+      })
     })
   end
 )
@@ -110,12 +159,12 @@ Handlers.add(
     
     if not state.isRegistered then
       print("[TRIGGER] Error: Node not registered")
-      return msg.reply({ Data = "Node not registered with registry" })
+      return msg.reply({ Data = serializeToJson({ error = "Node not registered with registry" }) })
     end
 
     if not msg.Tags.Workflowid or not msg.Tags.Orchestratorid then
       print("[TRIGGER] Error: Workflow ID or Orchestrator ID missing")
-      return msg.reply({ Data = "Workflow ID and Orchestrator ID required" })
+      return msg.reply({ Data = serializeToJson({ error = "Workflow ID and Orchestrator ID required" }) })
     end
 
     -- Increment trigger count and send trigger event
@@ -127,7 +176,7 @@ Handlers.add(
     ao.send({
       Target = msg.Tags.Orchestratorid,
       Action = "WorkflowTrigger",
-      Data = msg.Data or {},
+      Data = serializeToJson(msg.Data or {}),
       Tags = {
         ["Content-Type"] = "application/json",
         ["Trigger-Type"] = "manual",
@@ -139,11 +188,11 @@ Handlers.add(
 
     -- Send confirmation
     msg.reply({
-      Data = {
+      Data = serializeToJson({
         status = "triggered",
         count = state.triggerCount,
         timestamp = os.time()
-      }
+      })
     })
     print("[TRIGGER] Trigger confirmation sent to caller")
   end

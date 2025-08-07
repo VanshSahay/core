@@ -55,7 +55,7 @@ Send({
   Tags = {
     Registryid = REGISTRY_ID
   }
-}).receive()
+}).receive().Data
 
 # Configure factory
 Send({
@@ -64,7 +64,7 @@ Send({
   Tags = {
     Factoryid = FACTORY_ID
   }
-}).receive()
+}).receive().Data
 ```
 
 6. Spawn and configure the nodes:
@@ -80,13 +80,13 @@ Send({
   Tags = {
     Registryid = REGISTRY_ID
   }
-}).receive()
+}).receive().Data
 
 # Verify trigger node status
 Send({
   Target = TRIGGER_ID,
   Action = "Status"
-}).receive()
+}).receive().Data
 
 # Spawn logger node
 aos logger --load log-output.lua
@@ -99,13 +99,13 @@ Send({
   Tags = {
     Registryid = REGISTRY_ID
   }
-}).receive()
+}).receive().Data
 
 # Verify logger node status
 Send({
   Target = LOGGER_ID,
   Action = "Status"
-}).receive()
+}).receive().Data
 ```
 
 7. Deploy a workflow:
@@ -114,24 +114,7 @@ Send({
 Send({
   Target = MANAGER_ID,
   Action = "DeployWorkflow",
-  Data = {
-    nodes = {
-      trigger = {
-        processId = TRIGGER_ID,
-        type = "trigger"
-      },
-      logger = {
-        processId = LOGGER_ID,
-        type = "output"
-      }
-    },
-    connections = {
-      {
-        from = "trigger",
-        to = "logger"
-      }
-    }
-  }
+  Data = '{"nodes":{"trigger":{"processId":"' .. TRIGGER_ID .. '","type":"trigger"},"logger":{"processId":"' .. LOGGER_ID .. '","type":"output"}},"connections":[{"from":"trigger","to":"logger"}]}'
 }).receive()
 # Save the workflow ID from the response as WORKFLOW_ID
 ```
@@ -147,11 +130,12 @@ aos trigger
 Send({
   Target = TRIGGER_ID,
   Action = "Trigger",
-  Data = "Hello Flowweave!",
+  Data = '"Hello Flowweave!"',
   Tags = {
-    Workflowid = WORKFLOW_ID
+    Workflowid = WORKFLOW_ID,
+    Orchestratorid = ORCHESTRATOR_ID
   }
-}).receive()
+}).receive().Data
 ```
 
 2. Check the logs:

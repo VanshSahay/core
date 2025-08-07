@@ -7,6 +7,54 @@ if not nodes then
   print("Initialized empty nodes table")
 end
 
+-- JSON utility functions
+local function serializeToJson(data)
+  if type(data) == "table" then
+    local json = "{"
+    local first = true
+    for k, v in pairs(data) do
+      if not first then json = json .. "," end
+      json = json .. string.format('"%s":', k)
+      if type(v) == "table" then
+        json = json .. serializeToJson(v)
+      elseif type(v) == "string" then
+        json = json .. string.format('"%s"', v)
+      else
+        json = json .. tostring(v)
+      end
+      first = false
+    end
+    return json .. "}"
+  elseif type(data) == "string" then
+    return string.format('"%s"', data)
+  else
+    return tostring(data)
+  end
+end
+
+local function deserializeJson(jsonStr)
+  if type(jsonStr) ~= "string" then return jsonStr end
+  -- Basic JSON parsing
+  local function parseValue(str)
+    str = str:match("^%s*(.-)%s*$") -- Trim whitespace
+    if str:sub(1,1) == "{" then
+      local obj = {}
+      str = str:sub(2, -2) -- Remove braces
+      for k, v in str:gmatch('"([^"]+)"%s*:%s*([^,}]+)') do
+        obj[k] = parseValue(v)
+      end
+      return obj
+    elseif str:sub(1,1) == '"' then
+      return str:sub(2, -2) -- Remove quotes
+    else
+      -- Try to convert to number if possible
+      local num = tonumber(str)
+      return num or str
+    end
+  end
+  return parseValue(jsonStr)
+end
+
 -- Debug function to print nodes
 local function printNodes()
   print("Current nodes in registry:")
@@ -28,28 +76,29 @@ Handlers.add(
   function(msg)
     print("Received registration request from: " .. msg.From)
     
-    if not msg.Data then
+    local nodeData = deserializeJson(msg.Data)
+    if not nodeData then
       print("Registration failed: No data provided")
       return msg.reply({
         Action = "RegisterResponse",
-        Data = {
+        Data = serializeToJson({
           status = "error",
           error = "Registration data required"
-        }
+        })
       })
     end
 
     -- Validate required fields
     local required = {"name", "type", "description", "capabilities"}
     for _, field in ipairs(required) do
-      if not msg.Data[field] then
+      if not nodeData[field] then
         print("Registration failed: Missing field " .. field)
         return msg.reply({
           Action = "RegisterResponse",
-          Data = {
+          Data = serializeToJson({
             status = "error",
             error = field .. " is required"
-          }
+          })
         })
       end
     end
@@ -58,10 +107,10 @@ Handlers.add(
     local currentTime = getCurrentTime()
     nodes[msg.From] = {
       status = "active",
-      name = msg.Data.name,
-      type = msg.Data.type,
-      description = msg.Data.description,
-      capabilities = msg.Data.capabilities,
+      name = nodeData.name,
+      type = nodeData.type,
+      description = nodeData.description,
+      capabilities = nodeData.capabilities,
       lastSeen = currentTime
     }
 
@@ -71,15 +120,15 @@ Handlers.add(
     -- Send registration confirmation
     msg.reply({
       Action = "RegisterResponse",
-      Data = {
+      Data = serializeToJson({
         status = "success",
         nodeId = msg.From,
         timestamp = currentTime
-      },
+      }),
       Tags = {
         ["Content-Type"] = "application/json",
         ["Message-Type"] = "Registration",
-        ["Node-Type"] = msg.Data.type
+        ["Node-Type"] = nodeData.type
       }
     })
   end
@@ -118,7 +167,7 @@ Handlers.add(
     
     -- Return nodes
     msg.reply({
-      Data = filteredNodes,
+      Data = serializeToJson(filteredNodes),
       Tags = {
         ["Content-Type"] = "application/json",
         ["Node-Count"] = tostring(nodeCount)
@@ -134,10 +183,10 @@ Handlers.add(
   function(msg)
     if not nodes[msg.From] then
       return msg.reply({
-        Data = {
+        Data = serializeToJson({
           status = "error",
           error = "Node not registered"
-        }
+        })
       })
     end
 
@@ -148,10 +197,10 @@ Handlers.add(
     print(string.format("Updated heartbeat for node %s at time %d", msg.From, currentTime))
     
     msg.reply({
-      Data = {
+      Data = serializeToJson({
         status = "active",
         lastSeen = currentTime
-      }
+      })
     })
   end
 )
@@ -164,19 +213,19 @@ Handlers.add(
     local nodeId = msg.Tags["Node-Id"]
     if not nodeId then
       return msg.reply({
-        Data = {
+        Data = serializeToJson({
           status = "error",
           error = "Node-Id tag required"
-        }
+        })
       })
     end
 
     if not nodes[nodeId] then
       return msg.reply({
-        Data = {
+        Data = serializeToJson({
           status = "error",
           error = "Node not found"
-        }
+        })
       })
     end
 
@@ -189,12 +238,12 @@ Handlers.add(
     printNodes()
 
     msg.reply({
-      Data = {
+      Data = serializeToJson({
         status = "success",
         nodeId = nodeId,
         type = nodeInfo.type,
         name = nodeInfo.name
-      }
+      })
     })
   end
 )

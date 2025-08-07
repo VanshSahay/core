@@ -13,11 +13,60 @@ if not state then
 
   -- Load initial state from spawn data if available
   if ao.env and ao.env.Data then
-    state.workflowId = ao.env.Data.workflowId
-    state.nodes = ao.env.Data.nodes or {}
-    state.connections = ao.env.Data.connections or {}
+    local envData = deserializeJson(ao.env.Data)
+    state.workflowId = envData.workflowId
+    state.nodes = envData.nodes or {}
+    state.connections = envData.connections or {}
     print(string.format("Initialized orchestrator for workflow %s", state.workflowId))
   end
+end
+
+-- JSON utility functions
+local function serializeToJson(data)
+  if type(data) == "table" then
+    local json = "{"
+    local first = true
+    for k, v in pairs(data) do
+      if not first then json = json .. "," end
+      json = json .. string.format('"%s":', k)
+      if type(v) == "table" then
+        json = json .. serializeToJson(v)
+      elseif type(v) == "string" then
+        json = json .. string.format('"%s"', v)
+      else
+        json = json .. tostring(v)
+      end
+      first = false
+    end
+    return json .. "}"
+  elseif type(data) == "string" then
+    return string.format('"%s"', data)
+  else
+    return tostring(data)
+  end
+end
+
+local function deserializeJson(jsonStr)
+  if type(jsonStr) ~= "string" then return jsonStr end
+  -- Basic JSON parsing
+  local function parseValue(str)
+    str = str:match("^%s*(.-)%s*$") -- Trim whitespace
+    if str:sub(1,1) == "{" then
+      local obj = {}
+      str = str:sub(2, -2) -- Remove braces
+      for k, v in str:gmatch('"([^"]+)"%s*:%s*([^,}]+)') do
+        obj[k] = parseValue(v)
+      end
+      return obj
+    elseif str:sub(1,1) == '"' then
+      return str:sub(2, -2) -- Remove quotes
+    else
+      -- Try to convert to number if possible
+      local num = tonumber(str)
+      return num or str
+    end
+  end
+  return parseValue(jsonStr)
 end
 
 -- Helper function to find next nodes in workflow
@@ -40,10 +89,10 @@ Handlers.add(
     
     if msg.Tags.Workflowid ~= state.workflowId then
       return msg.reply({
-        Data = {
+        Data = serializeToJson({
           status = "error",
           error = "Wrong workflow ID"
-        }
+        })
       })
     end
 
@@ -51,10 +100,10 @@ Handlers.add(
     local triggerNodeId = msg.From
     if not triggerNodeId then
       return msg.reply({
-        Data = {
+        Data = serializeToJson({
           status = "error",
           error = "Missing trigger node ID"
-        }
+        })
       })
     end
 
@@ -69,10 +118,10 @@ Handlers.add(
 
     if not found then
       return msg.reply({
-        Data = {
+        Data = serializeToJson({
           status = "error",
           error = "Invalid trigger node"
-        }
+        })
       })
     end
 
@@ -90,7 +139,7 @@ Handlers.add(
         ao.send({
           Target = node.processId,
           Action = "Log",
-          Data = msg.Data,
+          Data = serializeToJson(msg.Data),
           Tags = {
             Workflowid = state.workflowId,
             Nodeid = nodeId,
@@ -101,10 +150,23 @@ Handlers.add(
     end
 
     msg.reply({
-      Data = {
+      Data = serializeToJson({
         status = "success",
         message = "Workflow execution started"
-      }
+      })
+    })
+  end
+)
+
+Handlers.add(
+  "Ping",
+  { Action = "Ping" },
+  function(msg)
+    msg.reply({
+      Data = serializeToJson({
+        status = "success",
+        message = "Pong"
+      })
     })
   end
 )
@@ -121,7 +183,7 @@ Handlers.add(
     table.insert(state.executionHistory, {
       nodeId = nodeId,
       timestamp = os.time(),
-      result = msg.Data
+      result = deserializeJson(msg.Data)
     })
 
     -- Find and execute next nodes
@@ -132,7 +194,7 @@ Handlers.add(
         ao.send({
           Target = node.processId,
           Action = "Log",
-          Data = msg.Data,
+          Data = serializeToJson(msg.Data),
           Tags = {
             Workflowid = state.workflowId,
             Nodeid = nextNodeId,
